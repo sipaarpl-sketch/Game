@@ -558,13 +558,11 @@
                 
                 conn.on('data', (data) => {
                     if (data.type === 'join_info') {
-                        // Host menerima nama Guest
                         let guestName = data.name;
                         players = [
                             { name: myOnlineName, pos: 1, id: 1 },
                             { name: guestName, pos: 1, id: 2 }
                         ];
-                        // Kirim balik data awal game ke Guest
                         conn.send({ type: 'start_game', players: players });
                         launchGameScreen(2);
                     }
@@ -586,7 +584,6 @@
 
                 conn.on('open', () => {
                     document.getElementById('onlineStatus').innerText = "Terhubung! Mengirim nama...";
-                    // Kirim nama sandi ke Host
                     conn.send({ type: 'join_info', name: myOnlineName });
                 });
 
@@ -723,13 +720,7 @@
         function handleRoll() {
             if (isRolling) return;
             
-            // Validasi Giliran Online
-            if (playMode === 'online') {
-                if ((isHost && currentPlayerIndex !== 0) || (!isHost && currentPlayerIndex !== 1)) {
-                    alert("Bukan giliranmu!"); return;
-                }
-            }
-
+            // HAPUS VALIDASI PEMBLOKIRAN GILIRAN ONLINE SUPAYA TIDAK ADA LAGI POPUP "Bukan giliranmu!"
             isRolling = true;
             document.getElementById('btnRoll').disabled = true;
 
@@ -746,7 +737,7 @@
                     let finalRoll = Math.floor(Math.random() * 6) + 1;
                     diceEl.innerText = diceIcons[finalRoll - 1];
 
-                    // Kirim aksi dadu ke HP lawan jika online
+                    // Kirim hasil lemparan dadu dan giliran ke HP lawan secara instan
                     if (playMode === 'online' && conn && conn.open) {
                         conn.send({ type: 'roll', steps: finalRoll, playerIdx: currentPlayerIndex });
                     }

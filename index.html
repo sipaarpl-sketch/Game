@@ -150,6 +150,7 @@
             font-weight: 700;
             cursor: pointer;
             box-shadow: 0 4px 12px rgba(255, 154, 162, 0.4);
+            width: 100%;
         }
 
         .btn-online {
@@ -394,7 +395,7 @@
             <div class="input-group">
                 <label>Jumlah Pemain:</label>
                 <select id="numPlayersSelect" onchange="updatePlayerInputs()">
-                    <option value="1">1 Pemain (Sosoan / Latihan)</option>
+                    <option value="1">1 Pemain (Latihan)</option>
                     <option value="2">2 Pemain</option>
                     <option value="3">3 Pemain</option>
                     <option value="4" selected>4 Pemain</option>
@@ -405,7 +406,10 @@
 
         <!-- Pilihan Online Beda HP -->
         <div id="onlineSetup" class="online-box">
-            <label style="font-size: 0.75rem; font-weight: bold; color: #6b5b95;">Ruangan Mabar Online:</label>
+            <div class="input-group" style="margin-bottom: 8px;">
+                <label>Nama Kamu (Online):</label>
+                <input type="text" id="myOnlineName" value="Pemain 1" placeholder="Masukkan namamu...">
+            </div>
             <button class="btn-start btn-online" onclick="hostRoom()">Buat Ruangan Baru (Host)</button>
             <div style="margin-top: 8px; display: flex; gap: 5px;">
                 <input type="text" id="roomCodeInput" placeholder="Kode Teman..." style="flex:1; padding:6px;">
@@ -470,7 +474,6 @@
     </div>
 
     <script>
-        // Ular & Tangga dengan ragam warna pastel yang cantik
         const snakes = { 
             98: { to: 78, color: '#ffb7b2' }, 
             95: { to: 56, color: '#ffdac1' }, 
@@ -497,11 +500,11 @@
         let players = [];
         let currentPlayerIndex = 0;
         let isRolling = false;
-        let playMode = 'local'; // 'local', 'bot', 'online'
+        let playMode = 'local'; 
 
-        // PeerJS Variabel
         let peer, conn;
         let isHost = false;
+        let myOnlineName = "Pemain 1";
 
         const boardEl = document.getElementById('board');
         const canvas = document.getElementById('gameCanvas');
@@ -538,8 +541,9 @@
 
         window.onload = () => { updatePlayerInputs(); };
 
-        // Fitur PeerJS Online Room
+        // --- PEERJS ONLINE ---
         function hostRoom() {
+            myOnlineName = document.getElementById('myOnlineName').value.trim() || "Host";
             let code = "RPL-" + Math.floor(100 + Math.random() * 900);
             peer = new Peer(code);
             isHost = true;
@@ -550,40 +554,51 @@
 
             peer.on('connection', (connection) => {
                 conn = connection;
-                document.getElementById('onlineStatus').innerText = "Teman terhubung! Memulai game...";
-                setTimeout(() => startOnlineGame(true), 1000);
-
-                conn.on('data', (data) => handlePeerData(data));
+                document.getElementById('onlineStatus').innerText = "Teman terhubung! Menunggu nama...";
+                
+                conn.on('data', (data) => {
+                    if (data.type === 'join_info') {
+                        // Host menerima nama Guest
+                        let guestName = data.name;
+                        players = [
+                            { name: myOnlineName, pos: 1, id: 1 },
+                            { name: guestName, pos: 1, id: 2 }
+                        ];
+                        // Kirim balik data awal game ke Guest
+                        conn.send({ type: 'start_game', players: players });
+                        launchGameScreen(2);
+                    }
+                });
             });
         }
 
         function joinRoom() {
             let code = document.getElementById('roomCodeInput').value.trim();
+            myOnlineName = document.getElementById('myOnlineName').value.trim() || "Guest";
             if (!code) { alert("Masukkan kode ruangan!"); return; }
 
             peer = new Peer();
             isHost = false;
 
             peer.on('open', () => {
-                document.getElementById('onlineStatus').innerText = "Menghubungkan...";
+                document.getElementById('onlineStatus').innerText = "Menghubungkan ke ruangan...";
                 conn = peer.connect(code);
 
                 conn.on('open', () => {
-                    document.getElementById('onlineStatus').innerText = "Terhubung ke Host!";
-                    setTimeout(() => startOnlineGame(false), 1000);
+                    document.getElementById('onlineStatus').innerText = "Terhubung! Mengirim nama...";
+                    // Kirim nama sandi ke Host
+                    conn.send({ type: 'join_info', name: myOnlineName });
                 });
 
-                conn.on('data', (data) => handlePeerData(data));
+                conn.on('data', (data) => {
+                    if (data.type === 'start_game') {
+                        players = data.players;
+                        launchGameScreen(2);
+                    } else {
+                        handlePeerData(data);
+                    }
+                });
             });
-        }
-
-        function startOnlineGame(host) {
-            players = [
-                { name: "Host (P1)", pos: 1, id: 1 },
-                { name: "Guest (P2)", pos: 1, id: 2 }
-            ];
-            playMode = 'online';
-            launchGameScreen(2);
         }
 
         function startGame() {
@@ -707,6 +722,8 @@
 
         function handleRoll() {
             if (isRolling) return;
+            
+            // Validasi Giliran Online
             if (playMode === 'online') {
                 if ((isHost && currentPlayerIndex !== 0) || (!isHost && currentPlayerIndex !== 1)) {
                     alert("Bukan giliranmu!"); return;
@@ -729,6 +746,7 @@
                     let finalRoll = Math.floor(Math.random() * 6) + 1;
                     diceEl.innerText = diceIcons[finalRoll - 1];
 
+                    // Kirim aksi dadu ke HP lawan jika online
                     if (playMode === 'online' && conn && conn.open) {
                         conn.send({ type: 'roll', steps: finalRoll, playerIdx: currentPlayerIndex });
                     }
@@ -791,7 +809,6 @@
             document.getElementById('btnRoll').disabled = false;
             addLog(`Giliran: ${players[currentPlayerIndex].name}`);
 
-            // Jika mode AI Bot dan giliran bot
             if (playMode === 'bot' && players[currentPlayerIndex].name.includes("AI Bot")) {
                 document.getElementById('btnRoll').disabled = true;
                 setTimeout(() => { handleRoll(); }, 1000);
